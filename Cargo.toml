@@ -4,3 +4,8 @@ version = "0.1.0"
 authors = ["Christopher Augustus <repos@c4augustus.com>"]
 
 [dependencies]
+## use local working tree
+##gfx = "0.12"
+gfx = { path = "../gfx/src/render", version = "0.12" }
+##gfx_app = { git = "https://github.com/gfx-rs/gfx.git", version = "0.3" }
+gfx_app = { path = "../gfx", version = "0.3" }
