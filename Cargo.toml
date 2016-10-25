@@ -1,5 +1,5 @@
 [package]
-name = "rustvr-gl-gfx"
+name = "rustvr-gr-gfx"
 version = "0.1.0"
 authors = ["Christopher Augustus <repos@c4augustus.com>"]
 
@@ -9,3 +9,10 @@ authors = ["Christopher Augustus <repos@c4augustus.com>"]
 gfx = { path = "../gfx/src/render", version = "0.12" }
 ##gfx_app = { git = "https://github.com/gfx-rs/gfx.git", version = "0.3" }
 gfx_app = { path = "../gfx", version = "0.3" }
+## from gfx [dependencies] used by the example we copied:
+time = "0.1"
+## from gfx [dev_dependencies] used by the example we copied:
+cgmath = "0.7"
+genmesh = "0.4"
+noise = "0.1"
+rand = "0.3"
