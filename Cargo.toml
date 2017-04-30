@@ -4,15 +4,15 @@ version = "0.1.0"
 authors = ["Christopher Augustus <repos@c4augustus.com>"]
 
 [dependencies]
-##rustvr-core = { git = "https://github.com/rustvr/rustvr-core.git", version = "0.1" }
-## to use local working tree:
-rustvr-core = { path = "../rustvr-core", version = "0.1" }
-##gfx = "0.12"
-## to use local working tree:
-gfx = { path = "../gfx/src/render", version = "0.12" }
-##gfx_app = { git = "https://github.com/gfx-rs/gfx.git", version = "0.3" }
-## to use local working tree:
-gfx_app = { path = "../gfx", version = "0.3" }
+rustvr-core = { git = "https://github.com/rustvr/rustvr-core.git", version = "0.1" }
+## !!! to use local working tree instead:
+##rustvr-core = { path = "../rustvr-core", version = "0.1" }
+gfx = "0.12"
+## !!! to use local working tree instead:
+##gfx = { path = "../gfx/src/render", version = "0.12" }
+gfx_app = "0.3"
+## !!! to use local working tree instead:
+##gfx_app = { path = "../gfx", version = "0.3" }
 ## from gfx [dependencies] used by the example we copied:
 time = "0.1"
 ## from gfx [dev_dependencies] used by the example we copied:
