@@ -18,21 +18,20 @@ use gfx; // !!! extern crate gfx; is defined in lib.rs because of macros
 
 extern crate cgmath;
 extern crate gfx_app;
-extern crate time;
-extern crate rand;
 extern crate genmesh;
 extern crate noise;
+extern crate rand;
+extern crate winit;
 
-use self::rand::Rng;
-use self::cgmath::{SquareMatrix, Matrix4, Point3, Vector3};
-use self::cgmath::{Transform, AffineMatrix3};
 pub use gfx::format::{DepthStencil};
-pub use self::gfx_app::ColorFormat;
+pub use self::gfx_app::{ColorFormat, DepthFormat};
+
+use self::cgmath::{Deg, Matrix4, Point3, SquareMatrix, Vector3};
 use self::genmesh::{Vertices, Triangulate};
 use self::genmesh::generators::{Plane, SharedVertex, IndexedPolygon};
-use self::time::precise_time_s;
 use self::noise::{Seed, perlin2};
-
+use self::rand::Rng;
+use std::time::{Instant};
 
 gfx_defines!{
     vertex Vertex {
@@ -53,7 +52,7 @@ gfx_defines!{
         view: gfx::Global<[[f32; 4]; 4]> = "u_View",
         proj: gfx::Global<[[f32; 4]; 4]> = "u_Proj",
         out_color: gfx::RenderTarget<ColorFormat> = "Target0",
-        out_depth: gfx::DepthTarget<DepthStencil> =
+        out_depth: gfx::DepthTarget<DepthFormat> =
             gfx::preset::depth::LESS_EQUAL_WRITE,
     }
 }
@@ -74,22 +73,30 @@ struct App<R: gfx::Resources> {
     pso: gfx::PipelineState<R, pipe::Meta>,
     data: pipe::Data<R>,
     slice: gfx::Slice<R>,
+    start_time: Instant,
 }
 
 impl<R: gfx::Resources> gfx_app::Application<R> for App<R> {
-    fn new<F: gfx::Factory<R>>(mut factory: F, init: gfx_app::Init<R>) -> Self {
+    fn new<F: gfx::Factory<R>>(factory: &mut F, backend: gfx_app::shade::Backend,
+           window_targets: gfx_app::WindowTargets<R>) -> Self {
         use gfx::traits::FactoryExt;
 
         let vs = gfx_app::shade::Source {
             glsl_120: include_bytes!("shader/terrain_120.glslv"),
-            glsl_150: include_bytes!("shader/terrain_150.glslv"),
+            glsl_150: include_bytes!("shader/terrain_150_core.glslv"),
+            glsl_es_300: include_bytes!("shader/terrain_300_es.glslv"),
             hlsl_40:  include_bytes!("data/vertex.fx"),
+            msl_11: include_bytes!("shader/terrain_vertex.metal"),
+            vulkan:   include_bytes!("data/vert.spv"),
             .. gfx_app::shade::Source::empty()
         };
         let ps = gfx_app::shade::Source {
             glsl_120: include_bytes!("shader/terrain_120.glslf"),
-            glsl_150: include_bytes!("shader/terrain_150.glslf"),
+            glsl_150: include_bytes!("shader/terrain_150_core.glslf"),
+            glsl_es_300: include_bytes!("shader/terrain_300_es.glslf"),
             hlsl_40:  include_bytes!("data/pixel.fx"),
+            msl_11: include_bytes!("shader/terrain_frag.metal"),
+            vulkan:   include_bytes!("data/frag.spv"),
             .. gfx_app::shade::Source::empty()
         };
 
@@ -97,10 +104,10 @@ impl<R: gfx::Resources> gfx_app::Application<R> for App<R> {
         let seed = Seed::new(rand_seed);
         let plane = Plane::subdivide(256, 256);
         let vertex_data: Vec<Vertex> = plane.shared_vertex_iter()
-            .map(|(x, y)| {
-                let h = perlin2(&seed, &[x, y]) * 32.0;
+            .map(|genmesh::Vertex { pos, .. }| {
+                let h = perlin2(&seed, &[pos[0], pos[1]]) * 32.0;
                 Vertex {
-                    pos: [25.0 * x, 25.0 * y, h],
+                    pos: [25.0 * pos[0], 25.0 * pos[1], h],
                     color: calculate_color(h),
                 }
             })
@@ -116,8 +123,8 @@ impl<R: gfx::Resources> gfx_app::Application<R> for App<R> {
 
         App {
             pso: factory.create_pipeline_simple(
-                vs.select(init.backend).unwrap(),
-                ps.select(init.backend).unwrap(),
+                vs.select(backend).unwrap(),
+                ps.select(backend).unwrap(),
                 pipe::new()
                 ).unwrap(),
             data: pipe::Data {
@@ -126,26 +133,28 @@ impl<R: gfx::Resources> gfx_app::Application<R> for App<R> {
                 model: Matrix4::identity().into(),
                 view: Matrix4::identity().into(),
                 proj: cgmath::perspective(
-                    cgmath::deg(60.0f32), init.aspect_ratio, 0.1, 1000.0
+                    Deg(60.0f32), window_targets.aspect_ratio, 0.1, 1000.0
                     ).into(),
-                out_color: init.color,
-                out_depth: init.depth,
+                out_color: window_targets.color,
+                out_depth: window_targets.depth,
             },
             slice: slice,
+            start_time: Instant::now(),
         }
     }
 
     fn render<C: gfx::CommandBuffer<R>>(&mut self, encoder: &mut gfx::Encoder<R, C>) {
-        let time = precise_time_s() as f32;
+        let elapsed = self.start_time.elapsed();
+        let time = elapsed.as_secs() as f32 + elapsed.subsec_nanos() as f32 / 1000_000_000.0;
         let x = time.sin();
         let y = time.cos();
-        let view: AffineMatrix3<f32> = Transform::look_at(
+        let view = Matrix4::look_at(
             Point3::new(x * 32.0, y * 32.0, 16.0),
             Point3::new(0.0, 0.0, 0.0),
             Vector3::unit_z(),
         );
 
-        self.data.view = view.mat.into();
+        self.data.view = view.into();
         let locals = Locals {
             model: self.data.model,
             view: self.data.view,
@@ -157,9 +166,17 @@ impl<R: gfx::Resources> gfx_app::Application<R> for App<R> {
         encoder.clear_depth(&self.data.out_depth, 1.0);
         encoder.draw(&self.slice, &self.pso, &self.data);
     }
+
+    fn on_resize(&mut self, window_targets: gfx_app::WindowTargets<R>) {
+        self.data.out_color = window_targets.color;
+        self.data.out_depth = window_targets.depth;
+        self.data.proj = cgmath::perspective(
+                Deg(60.0f32), window_targets.aspect_ratio, 0.1, 1000.0
+            ).into();
+    }
 }
 
 pub fn main() {
     use self::gfx_app::Application;
-    App::launch_default("Terrain example");
+    App::launch_simple("Terrain example");
 }
